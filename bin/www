@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+
+// Make it executabe by running 'chmod +x www'
+
+// You can also start the server here after importing it from app.js

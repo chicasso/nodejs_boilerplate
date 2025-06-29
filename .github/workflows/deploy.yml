@@ -1,0 +1,60 @@
+name: Deploy Express Application
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Choose the deployment environment'
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+
+jobs:
+  deploy:
+    name: Deploy to express-application-${{ inputs.target_env }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_env }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setting up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Prepare PM2 config for environment
+        run: |
+          if [ "${{ inputs.target_env }}" -eq "production" ]
+          then
+            cp pm2.prod.config.cjs pm2.config.cjs
+          else
+            cp pm2.dev.config.cjs pm2.config.cjs
+          fi
+
+      - name: Upload source code
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          # Uploading package-lock.json for 'npm ci' 
+          source: 'app.js,config,controllers,middlewares,models,routes,scripts,services,utils,package.json,pm2.config.cjs,package-lock.json'
+          target: '/home/${{ secrets.VM_USER }}/express_application'
+          script: |
+            bash logrotate.sh
+
+      - name: Install dependencies & Restart express application
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            mkdir -p ~/express_application
+            cd ~/express_application
+            npm install --omit=dev
+            pm2 startOrReload pm2.config.cjs
